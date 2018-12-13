@@ -20,7 +20,7 @@ from .sql_updates import check_already_followed, check_already_unfollowed
 from .sql_updates import insert_media, insert_username, insert_unfollow_count
 from .sql_updates import get_usernames_first, get_usernames
 from .sql_updates import get_username_random, get_username_to_unfollow_random
-from .sql_updates import check_and_insert_user_agent
+from .sql_updates import check_and_insert_user_agent, get_follow_user_count
 from fake_useragent import UserAgent
 import re
 import instaloader
@@ -872,29 +872,41 @@ class InstaBot:
 
     def auto_unfollow(self):
         checking = True
+        checking_counter = 0
+        checking_max = get_follow_user_count(self)
         while checking:
             username_row = get_username_to_unfollow_random(self)
-            if not username_row:
+            now = datetime.datetime.now()
+            if (not username_row) or (checking_counter == checking_max[0]):
                 self.write_log("Looks like there is nobody to unfollow.")
                 return False
             current_id = username_row[0]
             current_user = username_row[1]
             unfollow_count = username_row[2]
+            user_follow_time = datetime.datetime.strptime(username_row[3], '%Y-%m-%d %H:%M:%S.%f')
+            time_diff = now.timestamp() - user_follow_time.timestamp()
 
-            if not current_user:
-                current_user = self.get_username_by_user_id(user_id=current_id)
-            if not current_user:
-                log_string = "api limit reached from instagram. Will try later"
-                self.write_log(log_string)
-                return False
-            for wluser in self.unfollow_whitelist:
-                if wluser == current_user:
-                    log_string = (
-                        "found whitelist user, starting search again")
+            if self.follow_time < time_diff:
+                if not current_user:
+                    current_user = self.get_username_by_user_id(user_id=current_id)
+                if not current_user:
+                    log_string = "api limit reached from instagram. Will try later"
                     self.write_log(log_string)
-                    break
-            else:
+                    return False
+                for wluser in self.unfollow_whitelist:
+                    if wluser == current_user:
+                        log_string = (
+                            "found whitelist user, starting search again")
+                        self.write_log(log_string)
+                        checking_counter += 1
+                        break
+                else:
+                    checking = False
+              else:
                 checking = False
+                log_string = "it's not time to unfollow user: %s" % (current_id)
+                self.write_log(log_string)
+                checking_counter += 1
 
         if self.login_status:
             log_string = "Getting user info : %s" % current_user
