@@ -1221,6 +1221,8 @@ class InstaBot:
                 log_string = "found whitelist user, not unfollowing"
                 # problem, if just one user in unfollowlist -> might create inf. loop. therefore just skip round
                 self.logger.debug(log_string)
+                # start again to unfollow to get the next user
+                self.auto_unfollow()
                 return False
             else:
                 checking = False
